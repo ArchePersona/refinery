@@ -1,0 +1,32 @@
+{
+  "build_id": "BUILD-PLAN-AC01D14C",
+  "engine_artifact_paths": [
+    "dist/index.html"
+  ],
+  "failed_count": 0,
+  "files": [
+    {
+      "path": "dist/app.js",
+      "size": 49003
+    },
+    {
+      "path": "dist/index.html",
+      "size": 19694
+    },
+    {
+      "path": "dist/styles.css",
+      "size": 29941
+    }
+  ],
+  "status": "COMPLETED",
+  "success": true,
+  "success_count": 1,
+  "work_orders": [
+    {
+      "artifact_count": 1,
+      "assignment_id": "TASK-ac01d14c038e",
+      "reason_code": "SUCCESS",
+      "status": "COMPLETED"
+    }
+  ]
+}

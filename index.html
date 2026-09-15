@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TUI Agent Workspace — Cross-Session IPC Daemon & MCP Runtime</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body class="theme-tokyo-night">
+  <!-- Global App Wrapper -->
+  <div id="app-root">
+    
+    <!-- Top TUI Navigation & Daemon Control Bar -->
+    <header class="tui-header">
+      <div class="header-left">
+        <span class="brand-badge"><span class="pulse-dot"></span> TUI-AGENT-BUS</span>
+        <span class="socket-pill" id="daemon-socket-pill"><span class="icon">🔌</span> /tmp/tui-agent.sock</span>
+        <span class="status-pill" id="daemon-status-pill"><span class="indicator active"></span> DAEMON: RUNNING (PID 41920)</span>
+      </div>
+      
+      <div class="header-center">
+        <nav class="view-nav-tabs">
+          <button class="nav-tab active" data-view="panes"><span class="key-acc">F1</span> Panes & Terminals</button>
+          <button class="nav-tab" data-view="mcp"><span class="key-acc">F2</span> MCP Tools & Hub</button>
+          <button class="nav-tab" data-view="bus"><span class="key-acc">F3</span> IPC Bus & Events</button>
+          <button class="nav-tab" data-view="config"><span class="key-acc">F4</span> Config (TOML)</button>
+          <button class="nav-tab" data-view="logs"><span class="key-acc">F5</span> Session DB & Export</button>
+        </nav>
+      </div>
+
+      <div class="header-right">
+        <div class="provider-selector-wrap">
+          <label for="active-provider-select">Provider:</label>
+          <select id="active-provider-select" class="tui-select-sm">
+            <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
+            <option value="openai">OpenAI (GPT-4o)</option>
+            <option value="ollama">Ollama (DeepSeek-Coder:33b)</option>
+            <option value="local-mcp">Local Custom Endpoint</option>
+          </select>
+        </div>
+        <div class="header-actions">
+          <button class="tui-btn-xs" id="btn-spawn-pane" title="Split Pane (Horizontal/Vertical)">+ Split Pane</button>
+          <button class="tui-btn-xs" id="btn-toggle-theme" title="Cycle Color Themes">🎨 Theme</button>
+          <button class="tui-btn-xs btn-danger-soft" id="btn-restart-daemon" title="Restart Socket Daemon">↻ Daemon</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main id="workspace-viewport">
+      
+      <!-- VIEW 1: Terminal Multiplexer Panes (Tmux / Zellij layout) -->
+      <section id="view-panes" class="view-section active-view">
+        <div class="multiplexer-toolbar">
+          <div class="mux-left">
+            <span class="mux-title">[SESSION: dev-workspace-main]</span>
+            <span class="mux-pane-count" id="pane-counter-label">3 Active Panes</span>
+            <span class="mux-sep">|</span>
+            <button class="mux-action-btn" id="btn-mux-split-v">◫ Split Vertical</button>
+            <button class="mux-action-btn" id="btn-mux-split-h">⊟ Split Horizontal</button>
+            <button class="mux-action-btn" id="btn-mux-presets">⚡ Preset Layouts</button>
+          </div>
+          <div class="mux-right">
+            <span class="tip-label">Quick Cmds: <code>tui-agent query "..."</code> | <code>tui-agent send "..."</code> | <code>tui-agent listen</code></span>
+            <button class="mux-action-btn primary" id="btn-send-agent-prompt">✨ Prompt Agent</button>
+          </div>
+        </div>
+
+        <!-- Panes Grid Container -->
+        <div class="panes-grid-container" id="panes-grid">
+          <!-- Dynamic terminal panes rendered by JS -->
+        </div>
+      </section>
+
+      <!-- VIEW 2: MCP Tools & Provider Runtime -->
+      <section id="view-mcp" class="view-section">
+        <div class="mcp-view-layout">
+          <!-- Left: MCP Servers List -->
+          <div class="mcp-sidebar">
+            <div class="sub-panel-header">
+              <h3>MCP Tool Servers</h3>
+              <button class="tui-btn-xs" id="btn-add-mcp-server">+ Register Server</button>
+            </div>
+            <div class="mcp-server-list" id="mcp-server-list">
+              <!-- Populated by JS -->
+            </div>
+            <div class="mcp-stats-box">
+              <div class="stat-row"><span>Total Tools:</span> <strong id="mcp-tool-count">12</strong></div>
+              <div class="stat-row"><span>Approval Mode:</span> <strong class="badge-warning" id="approval-mode-badge">Gate On Destructive</strong></div>
+              <div class="stat-row"><span>Protocol:</span> <code>MCP v2024-11-05</code></div>
+            </div>
+          </div>
+
+          <!-- Right: MCP Tools Registry & Interactive Runner -->
+          <div class="mcp-content-area">
+            <div class="sub-panel-header">
+              <div class="header-with-filter">
+                <h3 id="selected-mcp-server-name">File & Shell MCP Runtime</h3>
+                <input type="text" id="tool-search-input" class="tui-input-sm" placeholder="Filter tools (e.g. read_file, git_status)...">
+              </div>
+              <button class="tui-btn-xs" id="btn-test-all-mcp">Run Health Check</button>
+            </div>
+            <div class="mcp-tools-table-wrap">
+              <table class="tui-table" id="mcp-tools-table">
+                <thead>
+                  <tr>
+                    <th>Tool Name</th>
+                    <th>Server</th>
+                    <th>Category</th>
+                    <th>Safety Gate</th>
+                    <th>Parameters</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="mcp-tools-tbody">
+                  <!-- Populated by JS -->
+                </tbody>
+              </table>
+            </div>
+            <!-- Interactive Tool Invoker -->
+            <div class="tool-test-console">
+              <div class="sub-panel-header secondary">
+                <span>Interactive Tool Execution Sandbox</span>
+                <span id="active-test-tool-label">Tool: none selected</span>
+              </div>
+              <div class="tool-test-body">
+                <div class="tool-test-inputs" id="tool-input-fields-container">
+                  <p class="empty-hint">Select a tool above to inspect schema and test live execution with approval safety gate.</p>
+                </div>
+                <div class="tool-test-output-panel">
+                  <div class="test-out-bar">
+                    <span>Execution JSON Response</span>
+                    <button class="tui-btn-xs" id="btn-exec-test-tool" disabled>Execute Tool</button>
+                  </div>
+                  <pre id="tool-exec-output-pre"><code>// Result payload will display here...</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: Cross-Session IPC Bus & Raw Event Log -->
+      <section id="view-bus" class="view-section">
+        <div class="ipc-bus-layout">
+          <div class="bus-metrics-panel">
+            <div class="metric-card">
+              <div class="metric-label">SOCKET DESCRIPTOR</div>
+              <div class="metric-val-code">/tmp/tui-agent.sock (UNIX)</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">CONNECTED CLIENTS</div>
+              <div class="metric-val" id="metric-clients-count">4</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">TOTAL BUS MESSAGES</div>
+              <div class="metric-val" id="metric-bus-msgs">1,429</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">ACTIVE CONTEXT CHUNKS</div>
+              <div class="metric-val" id="metric-context-chunks">8 Shared Variables</div>
+            </div>
+          </div>
+
+          <div class="bus-stream-container">
+            <div class="sub-panel-header">
+              <div class="header-left-group">
+                <h3>Real-Time IPC Message Broker Stream</h3>
+                <span class="badge-live">● STREAMING</span>
+              </div>
+              <div class="header-filter-group">
+                <select id="ipc-topic-filter" class="tui-select-sm">
+                  <option value="all">All Topics (*)</option>
+                  <option value="agent:prompt">agent:prompt</option>
+                  <option value="agent:token_stream">agent:token_stream</option>
+                  <option value="agent:tool_call">agent:tool_call</option>
+                  <option value="agent:tool_approval">agent:tool_approval</option>
+                  <option value="pane:context_sync">pane:context_sync</option>
+                  <option value="daemon:heartbeat">daemon:heartbeat</option>
+                </select>
+                <button class="tui-btn-xs" id="btn-clear-bus-logs">Clear Log</button>
+                <button class="tui-btn-xs" id="btn-bus-send-mock">Inject Mock Event</button>
+              </div>
+            </div>
+
+            <div class="bus-events-feed" id="bus-events-feed">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <div class="bus-context-memory-panel">
+            <div class="sub-panel-header">
+              <h3>Shared Context Memory Pool (Cross-Session)</h3>
+              <button class="tui-btn-xs" id="btn-add-context-key">+ Add Key</button>
+            </div>
+            <div class="context-keys-grid" id="context-keys-grid">
+              <!-- Dynamic context cards -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: Config Editor (TOML) & Shell Hooks -->
+      <section id="view-config" class="view-section">
+        <div class="config-view-layout">
+          <div class="config-left-editor">
+            <div class="sub-panel-header">
+              <div class="header-group">
+                <h3>Config File: <code>~/.config/tui-agent-workspace/config.toml</code></h3>
+                <span class="badge-info">Auto-Reload Enabled</span>
+              </div>
+              <div class="config-actions">
+                <button class="tui-btn-xs" id="btn-load-sample-config">Reset Defaults</button>
+                <button class="tui-btn-xs primary" id="btn-save-config">Save & Apply TOML</button>
+              </div>
+            </div>
+            <div class="editor-container">
+              <textarea id="toml-editor-textarea" spellcheck="false"></textarea>
+            </div>
+          </div>
+
+          <div class="config-right-hooks">
+            <div class="sub-panel-header">
+              <h3>Shell & Multiplexer Integration Scripts</h3>
+            </div>
+            <div class="hooks-accordion">
+              <div class="hook-box">
+                <div class="hook-header">
+                  <span>Zsh / Bash Integration (<code>~/.zshrc</code> / <code>~/.bashrc</code>)</span>
+                  <button class="tui-btn-xs btn-copy" data-target="hook-zsh-code">Copy</button>
+                </div>
+                <pre class="hook-code" id="hook-zsh-code"><code># TUI-Agent Cross-Session Shell Hook
+export TUI_AGENT_SOCKET="/tmp/tui-agent.sock"
+alias ask='tui-agent query'
+alias listen='tui-agent listen'
+alias send-pane='tui-agent send --pane-id=$TMUX_PANE'
+
+# Broadcast last exit code & git context to Daemon
+function tui_agent_precmd() {
+  tui-agent notify-context --cwd="$PWD" --git="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" &>/dev/null &
+}
+precmd_functions+=(tui_agent_precmd)</code></pre>
+              </div>
+
+              <div class="hook-box">
+                <div class="hook-header">
+                  <span>Tmux Status Bar Widget (<code>~/.tmux.conf</code>)</span>
+                  <button class="tui-btn-xs btn-copy" data-target="hook-tmux-code">Copy</button>
+                </div>
+                <pre class="hook-code" id="hook-tmux-code"><code># Show live agent status in Tmux statusline
+set -g status-right '#[fg=colour39]#(tui-agent status --format="{agent_icon} {active_tasks} tasks | {provider}") #[default]'</code></pre>
+              </div>
+
+              <div class="hook-box">
+                <div class="hook-header">
+                  <span>Zellij Layout Plugin Hook (<code>~/.config/zellij/config.kdl</code>)</span>
+                  <button class="tui-btn-xs btn-copy" data-target="hook-zellij-code">Copy</button>
+                </div>
+                <pre class="hook-code" id="hook-zellij-code"><code>// Zellij TUI Agent auto-pane spawner
+keybind {
+    bind "Alt a" { Run "tui-agent" "query" "--interactive"; }
+    bind "Alt m" { Run "tui-agent" "mcp" "panel"; }
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: Session History DB & Logs -->
+      <section id="view-logs" class="view-section">
+        <div class="logs-view-layout">
+          <div class="sub-panel-header">
+            <div class="header-group">
+              <h3>SQLite Session Storage: <code>~/.local/share/tui-agent/workspace.db</code></h3>
+              <span class="badge-info" id="logs-total-sessions">4 Sessions / 48 Messages</span>
+            </div>
+            <div class="header-filter-group">
+              <button class="tui-btn-xs" id="btn-export-jsonl">Export JSONL</button>
+              <button class="tui-btn-xs" id="btn-export-sqlite-json">Export JSON Dump</button>
+              <button class="tui-btn-xs btn-danger-soft" id="btn-clear-db-history">Wipe Local DB</button>
+            </div>
+          </div>
+          <div class="logs-content-grid">
+            <div class="session-selector-list" id="session-selector-list">
+              <!-- Populated by JS -->
+            </div>
+            <div class="session-detail-view" id="session-detail-view">
+              <div class="session-detail-header">
+                <span id="session-detail-title">Select a session from the list</span>
+                <span id="session-detail-meta"></span>
+              </div>
+              <div class="session-messages-stream" id="session-messages-stream">
+                <!-- Rendered conversation log -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Tmux-style Statusline -->
+    <footer class="tmux-statusline">
+      <div class="tmux-left">
+        <span class="tmux-session-badge">[0:agent-bus]</span>
+        <span class="tmux-win-pill active" data-view-target="panes">1:main-panes*</span>
+        <span class="tmux-win-pill" data-view-target="mcp">2:mcp-hub</span>
+        <span class="tmux-win-pill" data-view-target="bus">3:ipc-bus</span>
+        <span class="tmux-win-pill" data-view-target="config">4:config</span>
+        <span class="tmux-win-pill" data-view-target="logs">5:db-logs</span>
+      </div>
+      <div class="tmux-center">
+        <span id="tmux-last-agent-event">IPC Socket: Listening on /tmp/tui-agent.sock • 0 active approvals pending</span>
+      </div>
+      <div class="tmux-right">
+        <span class="tmux-tok-budget">Tokens: <span id="tmux-token-counter">1,842 / 128k</span></span>
+        <span class="tmux-clock" id="tmux-clock">12:00:00</span>
+        <span class="tmux-host">localhost (x86_64)</span>
+      </div>
+    </footer>
+
+    <!-- MODAL: Interactive Prompt Agent Dialog -->
+    <div class="tui-modal-overlay" id="prompt-modal" style="display:none;">
+      <div class="tui-modal-dialog">
+        <div class="tui-modal-header">
+          <span class="modal-title">✨ Send Multi-Session Agent Prompt</span>
+          <button class="modal-close-btn" id="btn-close-prompt-modal">✕</button>
+        </div>
+        <div class="tui-modal-body">
+          <div class="form-group">
+            <label for="prompt-target-pane">Target Output Pane / Session:</label>
+            <select id="prompt-target-pane" class="tui-select">
+              <option value="broadcast">[BROADCAST] All Active Panes</option>
+              <option value="pane-1">Pane 1 (bash)</option>
+              <option value="pane-2">Pane 2 (zsh)</option>
+              <option value="pane-3">Pane 3 (fish/tui-agent listen)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="prompt-input-text">Prompt / Task Description:</label>
+            <textarea id="prompt-input-text" class="tui-textarea" rows="4" placeholder="e.g. Inspect git diff, check test failures in ./src, and write a patch...">Check current project status, scan workspace directory, and explain active MCP capabilities.</textarea>
+          </div>
+          <div class="form-group-row">
+            <div class="form-group">
+              <label for="prompt-model-override">Model Engine:</label>
+              <select id="prompt-model-override" class="tui-select">
+                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                <option value="deepseek-coder">DeepSeek Coder 33B (Ollama)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Autonomous Tool Execution:</label>
+              <label class="toggle-label"><input type="checkbox" id="prompt-allow-tools" checked> Allow MCP Tools (with Safety Gates)</label>
+            </div>
+          </div>
+        </div>
+        <div class="tui-modal-footer">
+          <button class="tui-btn" id="btn-cancel-prompt">Cancel</button>
+          <button class="tui-btn primary" id="btn-submit-agent-prompt">🚀 Dispatch Prompt to IPC Bus</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Safety Confirmation Approval Gate -->
+    <div class="tui-modal-overlay" id="approval-gate-modal" style="display:none;">
+      <div class="tui-modal-dialog gate-dialog">
+        <div class="tui-modal-header danger-head">
+          <span class="modal-title">⚠️ MCP Tool Execution Approval Gate</span>
+          <span class="badge-danger">PERMISSION REQUIRED</span>
+        </div>
+        <div class="tui-modal-body">
+          <p class="gate-desc">An agent is requesting to execute a potentially destructive or environment-altering tool:</p>
+          <div class="gate-tool-info">
+            <div class="gate-info-row"><span>Tool Server:</span> <strong id="gate-server-name">shell_runner</strong></div>
+            <div class="gate-info-row"><span>Command / Action:</span> <code id="gate-tool-name">exec_command</code></div>
+            <div class="gate-info-row"><span>Requested Arguments:</span></div>
+            <pre class="gate-args-pre"><code id="gate-args-json">{
+  "command": "rm -rf ./build/*.tmp && cargo build --release",
+  "cwd": "/home/dev/tui-agent-workspace"
+}</code></pre>
+          </div>
+          <p class="gate-warning">Do you want to authorize this execution? All actions are recorded locally in SQLite.</p>
+        </div>
+        <div class="tui-modal-footer">
+          <button class="tui-btn btn-danger" id="btn-deny-approval">❌ Deny (Abort Tool)</button>
+          <button class="tui-btn btn-success" id="btn-grant-approval">✓ Approve & Execute</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="tui-toast-container"></div>
+
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+{
+  "sections": {
+    "Assumptions": [
+      "Runs as a lightweight background daemon with Unix domain socket / named pipe IPC on macOS, Linux, and Windows (WSL).",
+      "Target user is an engineer or power user interacting via standard terminal emulators, multiplexers (tmux, zellij), or native CLI commands.",
+      "Model integration supports standard provider APIs (Anthropic, OpenAI, Ollama, local LLMs) with Model Context Protocol (MCP) for tool discovery and execution."
+    ],
+    "Core Capabilities": [
+      "{'text': 'Cross-Session Agent Bus', 'children': ['Lightweight background daemon managing agent runtimes and shared state', 'Inter-process message broker allowing CLI/TUI sessions to broadcast and receive agent events', 'Context synchronization across active terminal panes, shells, and background tasks']}",
+      "{'text': 'Model & Tool Layer', 'children': ['Model-agnostic engine supporting OpenAI, Anthropic, Ollama, and custom OpenAI-compatible endpoints', 'Native Model Context Protocol (MCP) client support for plug-and-play tool integration', 'Configurable system prompts, streaming responses, and token budget management']}",
+      "{'text': 'TUI & CLI Interfaces', 'children': ['Headless daemon mode with lightweight CLI client for inline shell commands', 'Optional interactive TUI panel for monitoring active agents, chat streams, and session logs', 'Multiplexer integration hooks (tmux / zellij status bars and pane spawners)']}"
+    ],
+    "Data": [
+      "Session history, agent states, and conversation logs stored locally in SQLite or structured JSON/JSONL.",
+      "Configuration (endpoints, MCP servers, key bindings, defaults) stored in standard user config paths (~/.config/tui-agent-workspace/config.toml).",
+      "Sensitive credentials loaded via environment variables or native system keyrings."
+    ],
+    "Deliverables": [
+      "Core daemon engine with socket IPC and message bus.",
+      "CLI command suite (query, listen, send, status, stop).",
+      "Interactive TUI client for live agent monitoring and chat.",
+      "MCP client runtime and LLM provider adapter suite.",
+      "Comprehensive configuration template and shell integration scripts."
+    ],
+    "Future Expansion": [
+      "Remote multi-node agent mesh for cross-machine orchestration.",
+      "Custom plugin ecosystem for IDE integration (Neovim / VS Code extensions).",
+      "Fine-grained permission profiles per agent role."
+    ],
+    "Integrations": [
+      "Model Context Protocol (MCP) tool servers for file inspection, shell execution, git, and custom extensions.",
+      "Local and cloud LLM providers (Anthropic Claude, OpenAI GPT, Ollama local models).",
+      "Terminal multiplexer hooks and shell integrations (bash, zsh, fish)."
+    ],
+    "Objective": [
+      "Build an extensible terminal-native agent workspace that allows multiple independent terminal sessions and TUI tools to share context, coordinate agent actions, and communicate seamlessly via a unified IPC daemon."
+    ],
+    "Project": [
+      "OS/TUI/model agnostic workspace enabling native TUI workflows and cross-session agent communication."
+    ],
+    "Safety & Constraints": [
+      "Tool execution approval gates: interactive confirmation prompts for destructive shell or filesystem actions.",
+      "Local-first data privacy: conversation context and session logs never leave the local machine except when calling configured LLM APIs.",
+      "Graceful socket cleanup and lock handling to prevent stale daemon instances."
+    ],
+    "User Experience": [
+      "Users launch the daemon or let it auto-spawn on first CLI/TUI invocation.",
+      "Any terminal window can send prompts, pipe command output, or listen to agent events via simple CLI commands or dedicated TUI views.",
+      "Agents can notify other sessions when background tasks complete or request user confirmation before tool execution."
+    ]
+  }
+}
